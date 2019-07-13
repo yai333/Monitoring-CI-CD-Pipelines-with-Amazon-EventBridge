@@ -1,0 +1,75 @@
+defaults: &defaults
+  docker:
+    - image: wilson208/circleci-awscli
+
+  environment:
+    AWS_ACCESS_KEY_ID: xxxxxx
+    AWS_SECRET_ACCESS_KEY: xxxxxxxx
+    AWS_DEFAULT_REGION: ap-southeast-2
+
+version: 2
+jobs:
+  pre-build:
+    working_directory: ~/eventBridgeSample/my-app
+    <<: *defaults
+    steps:
+      - checkout:
+          path: ~/eventBridgeSample/
+      - attach_workspace:
+          at: ~/eventBridgeSample/
+      - restore_cache:
+          key: npm-v1-{{ checksum "package-lock.json" }}-{{ arch }}
+
+      - restore_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+
+      - run: npm install --save
+
+      - save_cache:
+          key: npm-v1-{{ checksum "package-lock.json" }}-{{ arch }}
+          paths:
+            - ~/.cache/npm
+
+      - save_cache:
+          key: node-v1-{{ checksum "package.json" }}-{{ arch }}
+          paths:
+            - node_modules
+
+      - persist_to_workspace:
+          root: ~/eventBridgeSample/my-app
+          paths:
+            - node_modules
+  deploy:
+    working_directory: ~/eventBridgeSample/my-app
+    <<: *defaults
+    steps:
+      - checkout:
+          path: ~/eventBridgeSample/
+      - attach_workspace:
+          at: ~/eventBridgeSample/my-app
+      - run:
+          command: |
+            CI=false npm run build
+            aws s3 sync build/ s3://ci-demo  --region ap-southeast-2 --delete
+      - run:
+          name: On success
+          when: on_success
+          command: |
+            aws events put-events --entries '[{ "Source": "circleci.myapp", "DetailType": "CircleCI state change", "Detail": "{ \"app\": \"myapp\", \"type\": \"success\" }"}]'
+      - run:
+          name: On fail
+          when: on_fail
+          command: |
+            aws events put-events --entries '[{ "Source": "circleci.myapp", "DetailType": "CircleCI state change", "Detail": "{ \"app\": \"myapp\", \"type\": \"fail\" }"}]'
+
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+      - pre-build
+      - deploy:
+          requires:
+            - pre-build
+          filters:
+            branches:
+              only: master

@@ -1,0 +1,7 @@
+[
+  {
+    "Source": "circleci.myapp",
+    "Detail": "{ \"app\": \"my-app\", \"type\": \"success\" }",
+    "DetailType": "CircleCI state change"
+  }
+]
